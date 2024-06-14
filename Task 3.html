@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        h1 {
+            margin-bottom: 20px;
+        }
+
+        .board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 5px;
+        }
+
+        .cell {
+            width: 100px;
+            height: 100px;
+            background-color: var(--cell-bg-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        .cell:hover {
+            background-color: var(--cell-hover-bg-color);
+        }
+
+        .status, .score, .timer {
+            margin-top: 20px;
+            font-size: 20px;
+        }
+
+        .buttons {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: var(--button-bg-color);
+            color: var(--button-text-color);
+            border: none;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: var(--button-hover-bg-color);
+        }
+
+        .highlight {
+            background-color: var(--highlight-bg-color) !important;
+        }
+
+        .leaderboard {
+            margin-top: 20px;
+            font-size: 18px;
+        }
+
+        :root {
+            --bg-color: #f0f0f0;
+            --text-color: #000;
+            --cell-bg-color: #fff;
+            --cell-hover-bg-color: #e0e0e0;
+            --button-bg-color: #007bff;
+            --button-text-color: #fff;
+            --button-hover-bg-color: #0056b3;
+            --highlight-bg-color: #ffeb3b;
+        }
+
+        .dark-theme {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --cell-bg-color: #1e1e1e;
+            --cell-hover-bg-color: #333333;
+            --button-bg-color: #bb86fc;
+            --button-text-color: #000000;
+            --button-hover-bg-color: #3700b3;
+            --highlight-bg-color: #ff9800;
+        }
+    </style>
+</head>
+<body>
+    <h1>Tic-Tac-Toe</h1>
+    <div class="board" id="board">
+        <div class="cell" data-index="0"></div>
+        <div class="cell" data-index="1"></div>
+        <div class="cell" data-index="2"></div>
+        <div class="cell" data-index="3"></div>
+        <div class="cell" data-index="4"></div>
+        <div class="cell" data-index="5"></div>
+        <div class="cell" data-index="6"></div>
+        <div class="cell" data-index="7"></div>
+        <div class="cell" data-index="8"></div>
+    </div>
+    <div class="status" id="status">It's X's turn</div>
+    <div class="score" id="score">X: 0 | O: 0</div>
+    <div class="timer" id="timer">Time: 30s</div>
+    <div class="buttons">
+        <button id="restartButton">Restart Game</button>
+        <button id="undoButton">Undo Last Move</button>
+        <button id="toggleModeButton">Switch to Single Player</button>
+        <button id="themeSwitchButton">Switch to Dark Theme</button>
+    </div>
+    <audio id="clickSound" src="click.mp3"></audio>
+    <audio id="winSound" src="win.mp3"></audio>
+    <div class="leaderboard" id="leaderboard">
+        <h2>Leaderboard</h2>
+        <ul id="leaderboardList"></ul>
+    </div>
+    <script>
+        const board = document.getElementById('board');
+        const statusDisplay = document.getElementById('status');
+        const scoreDisplay = document.getElementById('score');
+        const timerDisplay = document.getElementById('timer');
+        const restartButton = document.getElementById('restartButton');
+        const undoButton = document.getElementById('undoButton');
+        const toggleModeButton = document.getElementById('toggleModeButton');
+        const themeSwitchButton = document.getElementById('themeSwitchButton');
+        const clickSound = document.getElementById('clickSound');
+        const winSound = document.getElementById('winSound');
+        const leaderboardList = document.getElementById('leaderboardList');
+
+        let gameActive = true;
+        let currentPlayer = 'X';
+        let gameState = ['', '', '', '', '', '', '', '', ''];
+        let moveHistory = [];
+        let singlePlayer = false;
+        let scores = { 'X': 0, 'O': 0 };
+        let darkTheme = false;
+        let timer;
+        let timeLeft = 30;
+
+        const winningConditions = [
+            [0, 1, 2],
+            [3, 4, 5],
+            [6, 7, 8],
+            [0, 3, 6],
+            [1, 4, 7],
+            [2, 5, 8],
+            [0, 4, 8],
+            [2, 4, 6]
+        ];
+
+        function startTimer() {
+            timer = setInterval(() => {
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    statusDisplay.innerHTML = `Time's up! ${currentPlayer === 'X' ? 'O' : 'X'} wins!`;
+                    scores[currentPlayer === 'X' ? 'O' : 'X']++;
+                    updateScore();
+                    gameActive = false;
+                } else {
+                    timeLeft--;
+                    timerDisplay.innerHTML = `Time: ${timeLeft}s`;
+                }
+            }, 1000);
+        }
+
+        function resetTimer() {
+            clearInterval(timer);
+            timeLeft = 30;
+            timerDisplay.innerHTML = `Time: ${timeLeft}s`;
+            startTimer();
+        }
+
+        function handleCellClick(clickedCellEvent) {
+            const clickedCell = clickedCellEvent.target;
+            const clickedCellIndex = parseInt(clickedCell.getAttribute('data-index'));
+
+            if (gameState[clickedCellIndex] !== '' || !gameActive) {
+                return;
+            }
+
+            gameState[clickedCellIndex] = currentPlayer;
+            clickedCell.innerHTML = currentPlayer;
+            clickSound.play();
+            moveHistory.push(clickedCellIndex);
+
+            checkResult();
+
+            if (singlePlayer && gameActive && currentPlayer === 'O') {
+                setTimeout(makeAIMove, 500);
+            }
+        }
+
+        function checkResult() {
+            let roundWon = false;
+            let winningCells = [];
+
+            for (let i = 0; i < winningConditions.length; i++) {
+                const winCondition = winningConditions[i];
+                let a = gameState[winCondition[0]];
+                let b = gameState[winCondition[1]];
+                let c = gameState[winCondition[2]];
+
+                if (a === '' || b === '' || c === '') {
+                    continue;
+                }
+
+                if (a === b && b === c) {
+                    roundWon = true;
+                    winningCells = winCondition;
+                    break;
+                }
+            }
+
+            if (roundWon) {
+                statusDisplay.innerHTML = `Player ${currentPlayer} has won!`;
+                scores[currentPlayer]++;
+                updateScore();
+                winSound.play();
+                highlightWinningCells(winningCells);
+                gameActive = false;
+                clearInterval(timer);
+                if (singlePlayer) {
+                    updateLeaderboard(currentPlayer);
+                }
+                return;
+            }
+
+            const roundDraw = !gameState.includes('');
+            if (roundDraw) {
+                statusDisplay.innerHTML = 'Game ended in a draw!';
+                gameActive = false;
+                clearInterval(timer);
+                return;
+            }
+
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            statusDisplay.innerHTML = `It's ${currentPlayer}'s turn`;
+            resetTimer();
+        }
+
+        function handleRestartGame() {
+            gameActive = true;
+            currentPlayer = 'X';
+            gameState = ['', '', '', '', '', '', '', '', ''];
+            moveHistory = [];
+            statusDisplay.innerHTML = `It's ${currentPlayer}'s turn`;
+            document.querySelectorAll('.cell').forEach(cell => {
+                cell.innerHTML = '';
+                cell.classList.remove('highlight');
+            });
+            resetTimer();
+        }
+
+        function handleUndoLastMove() {
+            if (moveHistory.length === 0 || !gameActive) {
+                return;
+            }
+
+            const lastMoveIndex = moveHistory.pop();
+            gameState[lastMoveIndex] = '';
+            document.querySelector(`.cell[data-index="${lastMoveIndex}"]`).innerHTML = '';
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            statusDisplay.innerHTML = `It's ${currentPlayer}'s turn`;
+        }
+
+        function handleToggleMode() {
+            singlePlayer = !singlePlayer;
+            toggleModeButton.innerHTML = singlePlayer ? 'Switch to Two Player' : 'Switch to Single Player';
+            handleRestartGame();
+        }
+
+        function handleThemeSwitch() {
+            darkTheme = !darkTheme;
+            document.body.classList.toggle('dark-theme', darkTheme);
+            themeSwitchButton.innerHTML = darkTheme ? 'Switch to Light Theme' : 'Switch to Dark Theme';
+        }
+
+        function makeAIMove() {
+            let availableIndices = gameState.map((cell, index) => cell === '' ? index : null).filter(index => index !== null);
+            let aiMoveIndex = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+            gameState[aiMoveIndex] = currentPlayer;
+            document.querySelector(`.cell[data-index="${aiMoveIndex}"]`).innerHTML = currentPlayer;
+            clickSound.play();
+            moveHistory.push(aiMoveIndex);
+            checkResult();
+        }
+
+        function updateScore() {
+            scoreDisplay.innerHTML = `X: ${scores['X']} | O: ${scores['O']}`;
+        }
+
+        function highlightWinningCells(winningCells) {
+            winningCells.forEach(index => {
+                document.querySelector(`.cell[data-index="${index}"]`).classList.add('highlight');
+            });
+        }
+
+        function updateLeaderboard(winner) {
+            let listItem = document.createElement('li');
+            listItem.textContent = `Player ${winner} won!`;
+            leaderboardList.appendChild(listItem);
+        }
+
+        document.querySelectorAll('.cell').forEach(cell => cell.addEventListener('click', handleCellClick));
+        restartButton.addEventListener('click', handleRestartGame);
+        undoButton.addEventListener('click', handleUndoLastMove);
+        toggleModeButton.addEventListener('click', handleToggleMode);
+        themeSwitchButton.addEventListener('click', handleThemeSwitch);
+
+        startTimer();
+    </script>
+</body>
+</html>
